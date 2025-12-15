@@ -1,125 +1,164 @@
-# Generation ID: Hutch_1765782627575_zeo16y37y (前半)
+# Generation ID: Hutch_1765786264263_4s22kq2mp (前半)
 
 def myai(board, color):
     """
-    オセロで最も得点が取れる位置を返す
-    board: 6x6 または 8x8 のボード
-    color: 置く色 (1=BLACK, 2=WHITE)
-    return: (column, row) タプル
+    オセロの最適な着手位置を決定する関数
     """
     size = len(board)
-    
-    # スコアマップの生成（外側ほど高得点）
-    score_map = generate_score_map(size)
-    
-    # 有効な手を取得
-    valid_moves = get_valid_moves(board, color, size)
-    
+    opponent = 3 - color
+
+    # スコアテーブル（外側ほど高スコア）
+    score_table = create_score_table(size)
+
+    # 有効な手を探索
+    valid_moves = get_valid_moves(board, color)
+
     if not valid_moves:
         return None
-    
-    # 各手のスコアを計算
-    best_score = -1
+
     best_move = None
-    
-    for col, row in valid_moves:
-        # ボードをコピーして手を試す
-        temp_board = [row[:] for row in board]
-        flipped = simulate_move(temp_board, col, row, color, size)
-        
-        # スコア計算
-        move_score = calculate_score(temp_board, color, score_map, size)
-        
-        if move_score > best_score:
-            best_score = move_score
-            best_move = (col, row)
-    
+    best_score = -float('inf')
+
+    # ミニマックス探索（5手先まで）
+    for move in valid_moves:
+        board_copy = [row[:] for row in board]
+        captured = apply_move(board_copy, move, color)
+
+        # 評価値を計算
+        eval_score = minimax(board_copy, opponent, color, 5, score_table, size)
+        eval_score += score_table[move[1]][move[0]] * 0.5
+        eval_score += len(captured) * 10
+
+        if eval_score > best_score:
+            best_score = eval_score
+            best_move = move
+
     return best_move
 
 
-def generate_score_map(size):
-    """スコアマップを生成（外側ほど高得点）"""
-    score_map = [[0] * size for _ in range(size)]
-    
+def create_score_table(size):
+    """スコアテーブルを生成"""
+    table = [[0] * size for _ in range(size)]
+
     for i in range(size):
         for j in range(size):
-            # 辺からの距離
-            dist = min(i, j, size - 1 - i, size - 1 - j)
-            score_map[i][j] = dist + 1
-    
-    # 四隅を最高得点に
-    score_map[0][0] = size
-    score_map[0][size - 1] = size
-    score_map[size - 1][0] = size
-    score_map[size - 1][size - 1] = size
-    
-    return score_map
+            # 四隅が最高スコア
+            dist_to_corner = min(i, j, size - 1 - i, size - 1 - j)
+            table[i][j] = (dist_to_corner + 1) ** 2
+
+    return table
 
 
-def get_valid_moves(board, color, size):
-    """有効な手を全て取得"""
+def get_valid_moves(board, color):
+    """有効な着手位置を全て取得"""
+    size = len(board)
     valid_moves = []
-    opponent = 3 - color
-    
+
     for i in range(size):
         for j in range(size):
-            if board[i][j] == 0 and is_valid_move(board, j, i, color, opponent, size):
+            if board[i][j] == 0 and can_place(board, (j, i), color):
                 valid_moves.append((j, i))
-    
+
     return valid_moves
 
 
-def is_valid_move(board, col, row, color, opponent, size):
-    """指定位置が有効な手かチェック"""
+def can_place(board, pos, color):
+    """指定位置に置けるかチェック"""
+    x, y = pos
+    size = len(board)
+
+    if board[y][x] != 0:
+        return False
+
+    opponent = 3 - color
     directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-    
+
     for dx, dy in directions:
-        x, y = col + dx, row + dy
-        if 0 <= x < size and 0 <= y < size and board[y][x] == opponent:
-            x += dx
-            y += dy
-            while 0 <= x < size and 0 <= y < size:
-                if board[y][x] == 0:
-                    break
-                if board[y][x] == color:
-                    return True
-                x += dx
-                y += dy
-    
+        nx, ny = x + dx, y + dy
+        count = 0
+
+        while 0 <= nx < size and 0 <= ny < size and board[ny][nx] == opponent:
+            nx += dx
+            ny += dy
+            count += 1
+
+        if count > 0 and 0 <= nx < size and 0 <= ny < size and board[ny][nx] == color:
+            return True
+
     return False
 
 
-def simulate_move(board, col, row, color, size):
-    """手を実行してひっくり返す"""
+def apply_move(board, pos, color):
+    """着手を適用し、取られた石を返す"""
+    x, y = pos
+    size = len(board)
     opponent = 3 - color
-    board[row][col] = color
+    captured = []
+
+    board[y][x] = color
     directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-    flipped = 0
-    
+
     for dx, dy in directions:
-        flip_list = []
-        x, y = col + dx, row + dy
-        
-        while 0 <= x < size and 0 <= y < size and board[y][x] == opponent:
-            flip_list.append((x, y))
-            x += dx
-            y += dy
-        
-        if 0 <= x < size and 0 <= y < size and board[y][x] == color and flip_list:
-            for fx, fy in flip_list:
-                board[fy][fx] = color
-                flipped += 1
-    
-    return flipped
+        nx, ny = x + dx, y + dy
+        temp_captured = []
+
+        while 0 <= nx < size and 0 <= ny < size and board[ny][nx] == opponent:
+            temp_captured.append((nx, ny))
+            nx += dx
+            ny += dy
+
+        if temp_captured and 0 <= nx < size and 0 <= ny < size and board[ny][nx] == color:
+            for cx, cy in temp_captured:
+                board[cy][cx] = color
+                captured.append((cx, cy))
+
+    return captured
 
 
-def calculate_score(board, color, score_map, size):
-    """ボードのスコアを計算"""
-    score = 0
+def minimax(board, current_color, ai_color, depth, score_table, size):
+    """ミニマックス探索"""
+    if depth == 0:
+        return evaluate_board(board, ai_color, score_table, size)
+
+    valid_moves = get_valid_moves(board, current_color)
+
+    if not valid_moves:
+        opponent_moves = get_valid_moves(board, 3 - current_color)
+        if not opponent_moves:
+            return evaluate_board(board, ai_color, score_table, size)
+        return minimax(board, 3 - current_color, ai_color, depth, score_table, size)
+
+    if current_color == ai_color:
+        max_eval = -float('inf')
+        for move in valid_moves:
+            board_copy = [row[:] for row in board]
+            apply_move(board_copy, move, current_color)
+            eval_score = minimax(board_copy, 3 - current_color, ai_color, depth - 1, score_table, size)
+            max_eval = max(max_eval, eval_score)
+        return max_eval
+    else:
+        min_eval = float('inf')
+        for move in valid_moves:
+            board_copy = [row[:] for row in board]
+            apply_move(board_copy, move, current_color)
+            eval_score = minimax(board_copy, 3 - current_color, ai_color, depth - 1, score_table, size)
+            min_eval = min(min_eval, eval_score)
+        return min_eval
+
+
+def evaluate_board(board, ai_color, score_table, size):
+    """盤面を評価"""
+    ai_score = 0
+    opponent_score = 0
+    opponent = 3 - ai_color
+
     for i in range(size):
         for j in range(size):
-            if board[i][j] == color:
-                score += score_map[i][j]
-    return score
+            if board[i][j] == ai_color:
+                ai_score += score_table[i][j]
+            elif board[i][j] == opponent:
+                opponent_score += score_table[i][j]
 
-# Generation ID: Hutch_1765782627575_zeo16y37y (後半)
+    return ai_score - opponent_score
+
+# Generation ID: Hutch_1765786264263_4s22kq2mp (後半)
